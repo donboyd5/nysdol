@@ -2,12 +2,23 @@
 format: html
 editor-options: 
   chunk-output-type: console
+editor:
+  markdown:
+    canonical: true  
 ---
 
 # Get and save data
 
-Get qcew.zip from the NYSDOL website: https://dol.ny.gov/quarterly-census-employment-and-wages
-Direct link to [qcew.zip](https://statistics.labor.ny.gov/qcew.zip).
+Get qcew.zip from the NYSDOL website: https://dol.ny.gov/quarterly-census-employment-and-wages Direct link to [qcew.zip](https://statistics.labor.ny.gov/qcew.zip).
+
+If downloading directly, the file may be too large for the default, typically 60 seconds, in which case increase the timeout:
+
+> timeout \<- getOption("timeout") \
+> options(timeout = max(300, timeout))\
+> download.file(...., mode="wb") \
+> options(timeout = timeout)
+
+CAUTION: Sometimes NYSDOL uses unsupported ZIP compression method (9: deflation-64-bit) If so, either convert to regular zip using winrar (or some other method) or extract and read.
 
 ## Setup
 
@@ -71,12 +82,10 @@ rm(libs)
 
 ```
 
-
 ```{r}
+#| label: constants
 
 DRAW <- r"(E:\data\qcew\nysdol)"
-fname <- "qcew.zip"
-zpath <- fs::path(DRAW, fname)
 
 # County names as found in the NYSDOL QCEW
 
@@ -108,28 +117,55 @@ constants
 
 ```
 
+## Download qcew.zip if needed
+
+```{r}
+#| label: download-qcew.zip
+#| eval: false
+
+qurl <- "https://statistics.labor.ny.gov/qcew.zip"
+fname <- fs::path_file(qurl)
+
+timeout <- getOption("timeout")
+options(timeout = max(300, timeout))
+download.file(qurl, destfile = fs::path(DRAW, fname), mode = "wb")
+options(timeout = timeout)
+
+```
+
+## Recompress qcew.zip if needed
+
+```{r}
+
+```
+
 ## Get county information
 
 ```{r}
 #| label: get-qcew
 
-# get names of the csv annual files and then read them
+# get names of the csv quarterly files and then read them
 
-# zpath <- paste0(DRAW, "\\", fname)
+# un-comment one of the following
+# fname <- "qcew.zip"
+fname <- "qcew_recompressed.zip" # if recompressed externally
+zpath <- fs::path(DRAW, fname)
 zfiles <- zip::zip_list(zpath)
 
 csvfiles <- zfiles |>
   filter(str_starts(filename, "qcew_quarter_")) |>
   pull(filename)
 
-system.time(df <- vroom(purrr::map(csvfiles, \(x) unz(zpath, x)))) # ~10 secs
-# unzipping all to temp folder and using purrr is faster but not worth it (example at end)
+# Pipe directly into vroom
+system.time(
+  df <- vroom(purrr::map(csvfiles, \(x) archive::archive_read(zpath, file = x)))
+) # use archive_read rather than unz because it handles more kinds of compressed files; 10 secs
 
-# verify quarter and year
-count(df, YEAR, QUARTER) |> arrange(YEAR, QUARTER) |> tail()
+count(df, YEAR, QUARTER) |> filter(YEAR == max(YEAR)) # make sure it has the latest quarter
 
 ```
 
+## Clean, subset, and save qcew data
 
 ```{r}
 #| label: clean-and-subset
@@ -144,8 +180,8 @@ df3 <- df2 |>
   filter(areatype %in% c("State", "County")) |>
   mutate(areatype = str_to_lower(areatype)) |>
   mutate(
-    mta = area %in% constants$mtaregion$area,
-    nyc = area %in% constants$nyc$area
+    mta = area %in% constants$mtaregion,
+    nyc = area %in% constants$nyc
   )
 glimpse(df3)
 
@@ -167,104 +203,19 @@ df4 <- df3 |>
     totwage
   )
 
+saveRDS(df4, here::here("data", "qmta.rds"))
 
 ```
+
+## Explore
 
 ```{r}
+#| label: explore
 
-DMAIN <- here::here("pmt_model")
-
-suppressPackageStartupMessages(libs())
-
-source(fs::path(DMAIN, "R", "constants.r"))
-source(fs::path(DMAIN, "R", "functions.r"))
-
-
-# County names as found in the NYSDOL QCEW
-constants$mtaregion <- read_csv(
-  "area
-Bronx County
-Kings County
-New York County
-Queens County
-Richmond County
-
-Dutchess County
-Nassau County
-Orange County
-Putnam County
-Rockland County
-Suffolk County
-Westchester County
-",
-  show_col_types = FALSE
-)
-
-constants$nyc <- constants$mtaregion |>
-  slice_head(n = 5)
-
+qmta <- readRDS(here::here("data", "qmta.rds"))
+glimpse(qmta)
 
 ```
-
-```{r}
-#| label: get-qcew
-
-# get names of the csv annual files and then read them
-fname <- "qcew.zip"
-# zpath <- fs::path(PDRAW, fname)
-zpath <- paste0(PDRAW, "/", fname)
-zfiles <- zip::zip_list(zpath)
-
-csvfiles <- zfiles |>
-  filter(str_starts(filename, "qcew_quarter_")) |>
-  pull(filename)
-
-
-# Pipe directly into vroom
-df <- archive_read(zpath, file = csvfiles[1]) |> vroom()
-
-df2 <- csvfiles |>
-  map_dfr(~ archive_read(zpath, file = .x) |> vroom(), .id = "file_source")
-
-system.time(
-  df <- vroom(purrr::map(csvfiles, \(x) archive::archive_read(zpath, file = x)))
-) # use archive_read rather than unz because it handles more kinds of compressed files; 10 secs
-
-df2 <- df |>
-  rename_with(str_to_lower)
-
-# count(df2, areatype)
-# count(df2, areatype, owner)
-
-df3 <- df2 |>
-  filter(areatype %in% c("State", "County")) |>
-  mutate(areatype = str_to_lower(areatype)) |>
-  mutate(
-    mta = area %in% constants$mtaregion$area,
-    nyc = area %in% constants$nyc$area
-  )
-glimpse(df3)
-
-df4 <- df3 |>
-  filter(
-    (areatype == "state") |
-      mta,
-    owner %in% c("Total Private and Government", "Private")
-  ) |>
-  select(
-    areatype,
-    area,
-    year,
-    quarter,
-    naics,
-    naics_level,
-    naics_title,
-    owner,
-    totwage
-  )
-
-```
-
 
 ## Example of temp folder approach
 
@@ -294,5 +245,163 @@ df_combined <- vroom(
 unlink(temp_dir, recursive = TRUE)
 b <- proc.time()
 b - a # 6.7 secs
+
+```
+
+## possible 7z approach
+
+```{r}
+
+# system commands - extract and recompress
+# "C:\Program Files\7-Zip\7z.exe" x original.zip -oextracted_files
+# "C:\Program Files\7-Zip\7z.exe" a -tzip -mx=5 new_deflate.zip extracted_files\*
+
+# djb start ----
+zip_file <- "original.zip"
+output_file <- "converted.zip"
+extract_dir <- "temp_extract"
+seven_zip_path <- "C:/Program Files/7-Zip/7z.exe"
+if (!dir.exists(extract_dir)) dir.create(extract_dir) # Create extraction directory
+system2(
+  seven_zip_path,
+  args = c("x", shQuote(zip_file), paste0("-o", extract_dir))
+) # Extract
+system2(
+  seven_zip_path,
+  args = c(
+    "a",
+    "-tzip",
+    "-mx=5",
+    shQuote(output_file),
+    paste0(shQuote(extract_dir), "/*")
+  )
+) # Recompress
+unlink(extract_dir, recursive = TRUE) # Clean up
+# djb end
+
+# path7z <- r"(C:\Program Files\7-Zip\7z.exe)"
+
+## Path to 7-Zip (quoted because of the space)
+sevenzip <- shQuote("C:/Program Files/7-Zip/7z.exe")
+
+## 1.  Extract the original archive to a temporary directory
+tmp <- tempfile("qcew_unpacked_")
+dir.create(tmp)
+system2(
+  sevenzip,
+  c(
+    "x", # “eXtract” command
+    "-y", # assume Yes on all prompts
+    fs::path(DRAW, "qcew.zip"),
+    # "qcew.zip",
+    sprintf("-o%s", tmp)
+  )
+) # write into tmp/
+
+## 2.  Re-zip everything with ordinary Deflate (method 8)
+oldwd <- setwd(tmp)
+on.exit(setwd(oldwd))
+system2(
+  sevenzip,
+  c(
+    "a", # “Add” command
+    "-tzip", # create a .zip archive
+    "-mm=Deflate", # use Deflate, not Deflate64  <-- key line
+    "-mx=9", # maximum compression (optional)
+    "../qcew_deflate.zip", # output file alongside original
+    "."
+  )
+) # include all files in tmp/
+
+
+```
+
+```{r}
+#| eval: false
+
+zpath <- fs::path(DRAW, fname)
+filename <- "qcew_quarter_2000.csv" # exact name inside the zip
+
+# locate the 7-Zip executable; adjust if you installed it elsewhere
+sevenzip <- Sys.which("7z") # or "7za" / full path to 7z.exe
+sevenzip
+
+cmd <- sprintf('"%s" x -so "%s" "%s"', sevenzip, zpath, filename)
+con <- pipe(cmd, "rb") # 7-Zip writes the file to stdout
+on.exit(close(con), add = TRUE) # make sure the pipe closes
+
+df <- vroom(con, delim = ",")
+
+
+winrar_path <- r"(C:\Program Files\WinRAR\WinRAR.exe)"
+input_zip <- r"(E:\data\qcew\nysdol\qcew_deflate64.zip)" # Deflate64 ZIP
+output_zip <- path_temp("qcew_recompressed.zip") # Temp output
+
+# Command to recompress with standard ZIP (Deflate)
+system2(
+  command = winrar_path,
+  args = c(
+    "a", # "Add to archive"
+    "-afzip", # Force ZIP format (not RAR)
+    "-m0", # Compression level: 0 (store) to 5 (max, Deflate)
+    shQuote(output_zip), # Output path
+    shQuote(input_zip) # Input ZIP (WinRAR will extract and recompress)
+  )
+)
+
+# Verify
+if (file_exists(output_zip)) {
+  message("Success! New ZIP path: ", output_zip)
+} else {
+  stop("Conversion failed.")
+}
+
+```
+
+```{r}
+
+fname <- "qcew_djb.zip"
+zpath <- fs::path(DRAW, fname)
+
+
+Sys.which("7z")
+system2(sevenzip, c("l", zpath), stdout = TRUE)
+
+sevenzip <- Sys.which("7z") # full path; shows if R sees it
+zpath <- "E:/data/qcew/nysdol/qcew.zip"
+filename <- "qcew_quarter_2000.csv" # exact string from the listing
+
+cmd <- sprintf(
+  '"%s" e -so -bso0 -bse2 -bsp0 "%s" "%s"',
+  sevenzip,
+  zpath,
+  filename
+)
+
+con <- pipe(cmd, "rb")
+on.exit(close(con), add = TRUE) # ensure the pipe is closed
+
+df <- vroom(con, delim = ",", show_col_types = FALSE)
+
+readLines(pipe(cmd, "rt"), n = 5)
+```
+
+
+```{r}
+temp_dir <- tempdir()
+zip::unzip(zpath, files = csvfiles, exdir = temp_dir)
+system2(
+  "7z",
+  c("x", shQuote(zpath), paste0("-o", shQuote(temp_dir))),
+  wait = TRUE
+)
+df <- vroom::vroom(file.path(temp_dir, csvfiles), id = "source_file")
+
+utils::unzip(zpath, files = csvfiles, exdir = temp_dir, unzip = "internal")
+df <- vroom::vroom(file.path(temp_dir, csvfiles), id = "source_file")
+
+# caution: NYSDOL uses Unsupported ZIP compression method (9: deflation-64-bit)
+# either convert to regular zip using winrar (or some other method)
+# or extract and read
 
 ```
