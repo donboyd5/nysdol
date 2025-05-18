@@ -7,7 +7,9 @@
 .quarto/
 _book/
 _freeze/
+data/
 
 *.html
 *.png
+*.rds
 *.zip
