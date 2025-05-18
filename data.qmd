@@ -1,0 +1,286 @@
+---
+format: html
+editor-options: 
+  chunk-output-type: console
+---
+
+# Get and save data
+
+Get qcew.zip from the NYSDOL website: https://dol.ny.gov/quarterly-census-employment-and-wages
+Direct link to [qcew.zip](https://statistics.labor.ny.gov/qcew.zip).
+
+## Setup
+
+```{r}
+#| label: libraries
+
+libs <- function() {
+  library(rlang)
+  library(tidyverse)
+  tprint <- 75 # default tibble print
+  options(tibble.print_max = tprint, tibble.print_min = tprint) # show up to tprint rows
+  library(purrr)
+  library(archive) # better than using unz
+
+  library(fs)
+
+  # tools
+  library(vroom)
+  library(readxl)
+  library(openxlsx) # for writing xlsx files
+  library(lubridate)
+  library(RColorBrewer)
+  library(RcppRoll)
+  library(fredr)
+  library(tidycensus)
+
+  # boyd libraries
+  library(btools)
+  library(bdata)
+  library(bggtools)
+  library(bmaps)
+
+  # graphics
+  library(scales)
+  library(ggbeeswarm)
+  library(patchwork)
+  library(gridExtra)
+  library(ggrepel)
+  library(ggbreak)
+
+  # tables
+  library(formattable)
+  library(knitr)
+  library(kableExtra)
+  library(DT)
+  library(gt)
+  library(gtExtras)
+  library(janitor)
+  library(skimr)
+  library(vtable)
+
+  # maps
+  # library(maps)
+  # # https://cran.r-project.org/web/packages/usmap/vignettes/mapping.html
+  # library(usmap)
+}
+
+suppressPackageStartupMessages(libs())
+
+rm(libs)
+
+```
+
+
+```{r}
+
+DRAW <- r"(E:\data\qcew\nysdol)"
+
+# County names as found in the NYSDOL QCEW
+
+constants <- list()
+constants$mtaregion <- read_csv(
+  "area
+Bronx County
+Kings County
+New York County
+Queens County
+Richmond County
+
+Dutchess County
+Nassau County
+Orange County
+Putnam County
+Rockland County
+Suffolk County
+Westchester County
+",
+  show_col_types = FALSE
+)
+
+constants$nyc <- constants$mtaregion |>
+  slice_head(n = 5)
+
+constants
+```
+
+
+
+```{r}
+#| label: get-qcew
+
+# get names of the csv annual files and then read them
+fname <- "qcew.zip"
+
+zpath <- fs::path(DRAW, fname)
+# zpath <- paste0(DRAW, "\\", fname)
+zfiles <- zip::zip_list(zpath)
+
+csvfiles <- zfiles |>
+  filter(str_starts(filename, "qcew_quarter_")) |>
+  pull(filename)
+
+system.time(df <- vroom(purrr::map(csvfiles, \(x) unz(zpath, x)))) # 10.3 secs; unzipping all and using purrr is faster
+
+df2 <- df |>
+  rename_with(str_to_lower)
+
+# count(df2, areatype)
+# count(df2, areatype, owner)
+
+df3 <- df2 |>
+  filter(areatype %in% c("State", "County")) |>
+  mutate(areatype = str_to_lower(areatype)) |>
+  mutate(
+    mta = area %in% constants$mtaregion$area,
+    nyc = area %in% constants$nyc$area
+  )
+glimpse(df3)
+
+df4 <- df3 |>
+  filter(
+    (areatype == "state") |
+      mta,
+    owner %in% c("Total Private and Government", "Private")
+  ) |>
+  select(
+    areatype,
+    area,
+    year,
+    quarter,
+    naics,
+    naics_level,
+    naics_title,
+    owner,
+    totwage
+  )
+
+
+```
+
+
+```{r}
+
+DMAIN <- here::here("pmt_model")
+
+suppressPackageStartupMessages(libs())
+
+source(fs::path(DMAIN, "R", "constants.r"))
+source(fs::path(DMAIN, "R", "functions.r"))
+
+
+# County names as found in the NYSDOL QCEW
+constants$mtaregion <- read_csv(
+  "area
+Bronx County
+Kings County
+New York County
+Queens County
+Richmond County
+
+Dutchess County
+Nassau County
+Orange County
+Putnam County
+Rockland County
+Suffolk County
+Westchester County
+",
+  show_col_types = FALSE
+)
+
+constants$nyc <- constants$mtaregion |>
+  slice_head(n = 5)
+
+
+```
+
+```{r}
+#| label: get-qcew
+
+# get names of the csv annual files and then read them
+fname <- "qcew.zip"
+# zpath <- fs::path(PDRAW, fname)
+zpath <- paste0(PDRAW, "/", fname)
+zfiles <- zip::zip_list(zpath)
+
+csvfiles <- zfiles |>
+  filter(str_starts(filename, "qcew_quarter_")) |>
+  pull(filename)
+
+
+# Pipe directly into vroom
+df <- archive_read(zpath, file = csvfiles[1]) |> vroom()
+
+df2 <- csvfiles |>
+  map_dfr(~ archive_read(zpath, file = .x) |> vroom(), .id = "file_source")
+
+system.time(
+  df <- vroom(purrr::map(csvfiles, \(x) archive::archive_read(zpath, file = x)))
+) # use archive_read rather than unz because it handles more kinds of compressed files; 10 secs
+
+df2 <- df |>
+  rename_with(str_to_lower)
+
+# count(df2, areatype)
+# count(df2, areatype, owner)
+
+df3 <- df2 |>
+  filter(areatype %in% c("State", "County")) |>
+  mutate(areatype = str_to_lower(areatype)) |>
+  mutate(
+    mta = area %in% constants$mtaregion$area,
+    nyc = area %in% constants$nyc$area
+  )
+glimpse(df3)
+
+df4 <- df3 |>
+  filter(
+    (areatype == "state") |
+      mta,
+    owner %in% c("Total Private and Government", "Private")
+  ) |>
+  select(
+    areatype,
+    area,
+    year,
+    quarter,
+    naics,
+    naics_level,
+    naics_title,
+    owner,
+    totwage
+  )
+
+```
+
+
+
+
+```{r}
+#| label: faster-reading-with-purrr
+
+a <- proc.time()
+temp_dir <- tempfile("extracted_files_") # Creates a unique temp folder name
+dir.create(temp_dir) # Actually creates the folder
+
+# 3. Extract ONLY the needed files into the temp folder
+unzip(
+  zipfile = zpath,
+  files = csvfiles,
+  exdir = temp_dir,
+  junkpaths = TRUE # Removes internal ZIP folder structure (simplifies paths)
+)
+
+# 4. Read all files at once with vroom (row-binds them if same structure)
+df_combined <- vroom(
+  file = file.path(temp_dir, csvfiles), # Full paths to extracted files
+  id = "source_file" # Adds column tracking which file each row came from
+)
+
+# 5. Clean up: Delete the temp folder and all contents
+unlink(temp_dir, recursive = TRUE)
+b <- proc.time()
+b - a # 6.7 secs
+
+```

@@ -1,0 +1,47 @@
+project:
+  type: book
+  output-dir: _book
+
+execute:
+  freeze: auto
+  eval: true
+  echo: true
+  output: false
+  
+format:
+  html:
+    theme:
+      - cosmo
+    code-fold: true
+    number-depth: 5
+    toc-depth: 5
+    toc-expand: true      
+    column: page
+  # pdf:
+  #   documentclass: scrreprt  
+
+editor:
+  console: true
+  markdown:
+    canonical: true
+    
+book:
+  title: "NYSDOL qcew data"
+  author: "Don Boyd"
+  date: today
+  chapters:
+    - index.qmd
+    - data.qmd
+
+# my personal library: "C:/Users/donbo/Documents/R/win-library/4.5"
+# file.access("C:/Users/donbo/Documents/R/win-library/4.5", 2)     
+# Set primary library path in .Rprofile
+# .libPaths("C:/Users/donbo/Documents/R/win-library/4.5")
+
+# My preferred file top matter:
+
+# ---
+# format: html
+# editor-options: 
+#   chunk-output-type: console
+# ---
