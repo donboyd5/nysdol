@@ -108,7 +108,7 @@ constants
 
 ```
 
-
+## Get county information
 
 ```{r}
 #| label: get-qcew
@@ -122,7 +122,17 @@ csvfiles <- zfiles |>
   filter(str_starts(filename, "qcew_quarter_")) |>
   pull(filename)
 
-system.time(df <- vroom(purrr::map(csvfiles, \(x) unz(zpath, x)))) # 10.3 secs; unzipping all and using purrr is faster
+system.time(df <- vroom(purrr::map(csvfiles, \(x) unz(zpath, x)))) # ~10 secs
+# unzipping all to temp folder and using purrr is faster but not worth it (example at end)
+
+# verify quarter and year
+count(df, YEAR, QUARTER) |> arrange(YEAR, QUARTER) |> tail()
+
+```
+
+
+```{r}
+#| label: clean-and-subset
 
 df2 <- df |>
   rename_with(str_to_lower)
@@ -157,12 +167,6 @@ df4 <- df3 |>
     totwage
   )
 
-
-```
-
-
-```{r}
-#| label: clean-and-subset
 
 ```
 
@@ -262,10 +266,11 @@ df4 <- df3 |>
 ```
 
 
-
+## Example of temp folder approach
 
 ```{r}
-#| label: faster-reading-with-purrr
+#| label: faster-reading-with-temp-folder
+#| eval: false
 
 a <- proc.time()
 temp_dir <- tempfile("extracted_files_") # Creates a unique temp folder name
