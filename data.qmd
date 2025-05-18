@@ -75,6 +75,8 @@ rm(libs)
 ```{r}
 
 DRAW <- r"(E:\data\qcew\nysdol)"
+fname <- "qcew.zip"
+zpath <- fs::path(DRAW, fname)
 
 # County names as found in the NYSDOL QCEW
 
@@ -102,6 +104,8 @@ constants$nyc <- constants$mtaregion |>
   slice_head(n = 5)
 
 constants
+
+
 ```
 
 
@@ -110,9 +114,7 @@ constants
 #| label: get-qcew
 
 # get names of the csv annual files and then read them
-fname <- "qcew.zip"
 
-zpath <- fs::path(DRAW, fname)
 # zpath <- paste0(DRAW, "\\", fname)
 zfiles <- zip::zip_list(zpath)
 
@@ -158,6 +160,11 @@ df4 <- df3 |>
 
 ```
 
+
+```{r}
+#| label: clean-and-subset
+
+```
 
 ```{r}
 
