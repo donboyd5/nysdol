@@ -108,10 +108,10 @@ Suffolk County
 Westchester County
 ",
   show_col_types = FALSE
-)
+) |>
+  pull(area)
 
-constants$nyc <- constants$mtaregion |>
-  slice_head(n = 5)
+constants$nyc <- constants$mtaregion[1:5]
 
 constants
 
@@ -212,10 +212,19 @@ system.time(saveRDS(df, fs::path(DDATA, "qcew_raw.rds")))
 ## START to clean, subset, and save qcew data
 
 ```{r}
-#| label: clean-and-subset
+#| label: clean-save-all
+#| eval: false
 
 system.time(df <- readRDS(fs::path(DDATA, "qcew_raw.rds"))) # 17 secs
 glimpse(df)
+
+count(df, Owner)
+# 1 Federal Government            118244
+# 2 Local Government              266394
+# 3 Private                      7699135
+# 4 State Government              149627
+# 5 Total Government              619276
+# 6 Total Private and Government 8739375
 
 # do minimally required cleaning
 a <- proc.time()
@@ -230,7 +239,7 @@ owner_order <- c(
 
 df2 <- df |>
   rename_with(str_to_lower) |>
-  # slice_head(n = 10) |>
+  # slice_head(n = 1000) |>
   mutate(
     date = lubridate::yq(paste(year, quarter)),
     areatype = str_to_lower(areatype),
@@ -258,64 +267,67 @@ df2 <- df |>
 b <- proc.time()
 b - a # 35 secs
 
+# tmp <- count(df2, mta, area)
+
 system.time(saveRDS(df2, fs::path(DDATA, "qcew_clean.rds"))) # 48 secs
 
 count(df2, owner)
+count(df2, mta, nyc)
 
+```
 
-# 1 Federal Government            118244
-# 2 Local Government              266394
-# 3 Private                      7699135
-# 4 State Government              149627
-# 5 Total Government              619276
-# 6 Total Private and Government 8739375
+## Save state and county subset
 
-glimpse(df2)
-count(df2, date) |> ht()
-# count(df2, areatype)
-# count(df2, areatype, owner)
+```{r}
+#| label: clean-save-stateco
+#| eval: false
 
-df3 <- df2 |>
-  filter(areatype %in% c("State", "County")) |>
-  mutate(areatype = str_to_lower(areatype)) |>
-  mutate(
-    mta = area %in% constants$mtaregion,
-    nyc = area %in% constants$nyc
-  ) # reasonably fast
-glimpse(df3)
+system.time(qcew <- readRDS(fs::path(DDATA, "qcew_clean.rds"))) # 14 secs
 
+count(qcew, areatype)
+qcew_stateco <- qcew |>
+  filter(areatype %in% c("state", "county"))
 
-df4 <- df3 |>
+system.time(saveRDS(qcew_stateco, fs::path(DDATA, "qcew_stateco.rds"))) # 23 secs
+
+```
+
+## Save MTA (plus NYS) subset  
+
+```{r}
+#| label: clean-save-mta
+#| eval: false
+
+system.time(qcew <- readRDS(fs::path(DDATA, "qcew_clean.rds"))) # 14 secs
+
+count(qcew, areatype)
+count(qcew, mta)
+qmta <- qcew |>
   filter(
     (areatype == "state") |
-      mta,
-    owner %in% c("Total Private and Government", "Private")
-  ) |>
-  select(
-    areatype,
-    area,
-    year,
-    quarter,
-    naics,
-    naics_level,
-    naics_title,
-    owner,
-    totwage
+      ((areatype == "county") & mta)
   )
 
-saveRDS(df4, here::here("data", "qmta.rds"))
+glimpse(qmta)
+count(qmta, areatype, mta, area)
+
+system.time(saveRDS(qmta, fs::path(DDATA, "qcew_statemta.rds"))) # 9 secs
 
 ```
 
 ## Explore
-
+  
 ```{r}
 #| label: explore
 
 system.time(qcew <- readRDS(fs::path(DDATA, "qcew_clean.rds")))
+system.time(qmta <- readRDS(fs::path(DDATA, "qcew_statemta.rds")))
 
+glimpse(qcew)
+count(qcew, areatype)
+count(qcew, owner)
+count(qcew |> filter(as.integer(owner) == 4), owner)
 
-qmta <- readRDS(fs::path(DDATA, "qmta.rds"))
 glimpse(qmta)
 
 ```
