@@ -86,6 +86,7 @@ rm(libs)
 #| label: constants
 
 DRAW <- r"(E:\data\qcew\nysdol)"
+DDATA <- fs::path(DRAW, "data")
 
 # County names as found in the NYSDOL QCEW
 
@@ -179,9 +180,9 @@ b - a
 
 ```
 
-## Get county information
+## Get county information and save raw file
 
-Takes about 10 seconds.
+Takes about 10 seconds not counting save.
 
 ```{r}
 #| label: get-qcew
@@ -204,33 +205,79 @@ system.time(
 ) # use archive_read rather than unz because it handles more kinds of compressed files; 10 secs
 
 count(df, YEAR, QUARTER) |> filter(YEAR == max(YEAR)) # make sure it has the latest quarter
-saveRDS(df, fs::path(DRAW, "qcew_raw.rds"))
+system.time(saveRDS(df, fs::path(DDATA, "qcew_raw.rds")))
 
 ```
 
-## Clean, subset, and save qcew data
+## START to clean, subset, and save qcew data
 
 ```{r}
 #| label: clean-and-subset
 
-df <- readRDS(fs::path(DRAW, "qcew_raw.rds"))
+system.time(df <- readRDS(fs::path(DDATA, "qcew_raw.rds"))) # 17 secs
 glimpse(df)
+
+# do minimally required cleaning
+a <- proc.time()
+owner_order <- c(
+  "Total Private and Government",
+  "Private",
+  "Total Government",
+  "Federal Government",
+  "State Government",
+  "Local Government"
+)
 
 df2 <- df |>
   rename_with(str_to_lower) |>
-  slice_head() |>
-  mutate(date = lubridate::yq(paste(year, quarter))) |>
-  relocate(date)
+  # slice_head(n = 10) |>
+  mutate(
+    date = lubridate::yq(paste(year, quarter)),
+    areatype = str_to_lower(areatype),
+    mta = area %in% constants$mtaregion,
+    nyc = area %in% constants$nyc,
+    naics_level = as.integer(naics_level),
+    owner = factor(owner, levels = owner_order)
+  ) |>
+  select(
+    date,
+    areatype,
+    area,
+    mta,
+    nyc,
+    naics_level,
+    naics,
+    naics_title,
+    owner,
+    estab,
+    mnth1emp,
+    mnth2emp,
+    mnth3emp,
+    totwage
+  )
+b <- proc.time()
+b - a # 35 secs
+
+system.time(saveRDS(df2, fs::path(DDATA, "qcew_clean.rds"))) # 48 secs
+
+count(df2, owner)
+
+
+# 1 Federal Government            118244
+# 2 Local Government              266394
+# 3 Private                      7699135
+# 4 State Government              149627
+# 5 Total Government              619276
+# 6 Total Private and Government 8739375
+
 glimpse(df2)
 count(df2, date) |> ht()
 # count(df2, areatype)
 # count(df2, areatype, owner)
 
-yq("2020-2")
-
 df3 <- df2 |>
   filter(areatype %in% c("State", "County")) |>
-  mutate(, areatype = str_to_lower(areatype)) |>
+  mutate(areatype = str_to_lower(areatype)) |>
   mutate(
     mta = area %in% constants$mtaregion,
     nyc = area %in% constants$nyc
@@ -265,7 +312,10 @@ saveRDS(df4, here::here("data", "qmta.rds"))
 ```{r}
 #| label: explore
 
-qmta <- readRDS(here::here("data", "qmta.rds"))
+system.time(qcew <- readRDS(fs::path(DDATA, "qcew_clean.rds")))
+
+
+qmta <- readRDS(fs::path(DDATA, "qmta.rds"))
 glimpse(qmta)
 
 ```
