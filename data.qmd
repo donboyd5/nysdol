@@ -138,10 +138,50 @@ options(timeout = timeout)
 Takes ~ 15 secs
 
 ```{r}
+#| label: recompress
+#| eval: false
+
+a <- proc.time()
+zip_file <- "qcew.zip"
+output_file <- "qcew_recompressed.zip"
+zpath <- paste0(DRAW, "\\", zip_file)
+opath <- paste0(DRAW, "\\", output_file)
+
+extract_dir <- "temp_extract"
+seven_zip_path <- "C:/Program Files/7-Zip/7z.exe"
+
+unlink(opath, recursive = TRUE) # Clean up
+unlink(extract_dir, recursive = TRUE) # Clean up
+
+if (!dir.exists(extract_dir)) dir.create(extract_dir) # Create extraction directory
+system2(
+  seven_zip_path,
+  args = c("x", shQuote(zpath), paste0("-o", extract_dir))
+) # Extract
+
+original_wd <- getwd() # Get current working directory to return to later
+setwd(extract_dir) # Change to extraction directory and compress contents
+system2(
+  seven_zip_path,
+  args = c(
+    "a",
+    "-tzip",
+    "-mx=5",
+    # shQuote(file.path(original_wd, output_file)),
+    shQuote(opath),
+    "*"
+  )
+) # Recompress
+setwd(original_wd) # Return to original directory
+unlink(extract_dir, recursive = TRUE) # Clean up
+b <- proc.time()
+b - a
 
 ```
 
 ## Get county information
+
+Takes about 10 seconds.
 
 ```{r}
 #| label: get-qcew
@@ -259,25 +299,33 @@ b - a # 6.7 secs
 # "C:\Program Files\7-Zip\7z.exe" a -tzip -mx=5 new_deflate.zip extracted_files\*
 
 # djb start ----
-zip_file <- "original.zip"
-output_file <- "converted.zip"
+zip_file <- "qcew.zip"
+output_file <- "qcew_deflated.zip"
+zpath <- paste0(DRAW, "\\", zip_file)
+opath <- paste0(DRAW, "\\", output_file)
+
 extract_dir <- "temp_extract"
 seven_zip_path <- "C:/Program Files/7-Zip/7z.exe"
 if (!dir.exists(extract_dir)) dir.create(extract_dir) # Create extraction directory
 system2(
   seven_zip_path,
-  args = c("x", shQuote(zip_file), paste0("-o", extract_dir))
+  args = c("x", shQuote(zpath), paste0("-o", extract_dir))
 ) # Extract
+
+original_wd <- getwd() # Get current working directory to return to later
+setwd(extract_dir) # Change to extraction directory and compress contents
 system2(
   seven_zip_path,
   args = c(
     "a",
     "-tzip",
     "-mx=5",
-    shQuote(output_file),
-    paste0(shQuote(extract_dir), "/*")
+    # shQuote(file.path(original_wd, output_file)),
+    shQuote(opath),
+    "*"
   )
 ) # Recompress
+setwd(original_wd) # Return to original directory
 unlink(extract_dir, recursive = TRUE) # Clean up
 # djb end
 
