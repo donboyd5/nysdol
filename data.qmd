@@ -135,6 +135,8 @@ options(timeout = timeout)
 
 ## Recompress qcew.zip if needed
 
+Takes ~ 15 secs
+
 ```{r}
 
 ```
