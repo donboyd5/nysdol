@@ -45,3 +45,8 @@ book:
 # editor-options: 
 #   chunk-output-type: console
 # ---
+
+# keyboard shortcut qstop inserts the following chunk:
+# ```{r stop_here, echo=FALSE}
+# knitr::knit_exit()
+# ```

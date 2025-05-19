@@ -204,6 +204,7 @@ system.time(
 ) # use archive_read rather than unz because it handles more kinds of compressed files; 10 secs
 
 count(df, YEAR, QUARTER) |> filter(YEAR == max(YEAR)) # make sure it has the latest quarter
+saveRDS(df, fs::path(DRAW, "qcew_raw.rds"))
 
 ```
 
@@ -212,20 +213,30 @@ count(df, YEAR, QUARTER) |> filter(YEAR == max(YEAR)) # make sure it has the lat
 ```{r}
 #| label: clean-and-subset
 
-df2 <- df |>
-  rename_with(str_to_lower)
+df <- readRDS(fs::path(DRAW, "qcew_raw.rds"))
+glimpse(df)
 
+df2 <- df |>
+  rename_with(str_to_lower) |>
+  slice_head() |>
+  mutate(date = lubridate::yq(paste(year, quarter))) |>
+  relocate(date)
+glimpse(df2)
+count(df2, date) |> ht()
 # count(df2, areatype)
 # count(df2, areatype, owner)
 
+yq("2020-2")
+
 df3 <- df2 |>
   filter(areatype %in% c("State", "County")) |>
-  mutate(areatype = str_to_lower(areatype)) |>
+  mutate(, areatype = str_to_lower(areatype)) |>
   mutate(
     mta = area %in% constants$mtaregion,
     nyc = area %in% constants$nyc
-  )
+  ) # reasonably fast
 glimpse(df3)
+
 
 df4 <- df3 |>
   filter(
@@ -257,6 +268,10 @@ saveRDS(df4, here::here("data", "qmta.rds"))
 qmta <- readRDS(here::here("data", "qmta.rds"))
 glimpse(qmta)
 
+```
+
+```{r stop_here, echo=FALSE}
+knitr::knit_exit()
 ```
 
 ## Example of temp folder approach
