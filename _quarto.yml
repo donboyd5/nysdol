@@ -44,6 +44,9 @@ book:
 # format: html
 # editor-options: 
 #   chunk-output-type: console
+# editor:
+#   markdown:
+#     canonical: true  
 # ---
 
 # keyboard shortcut qstop inserts the following chunk:

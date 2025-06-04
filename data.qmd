@@ -7,7 +7,7 @@ editor:
     canonical: true  
 ---
 
-# Get and save data
+# Get and save QCEW QUARTERLY data (later update to get annual too)
 
 Get qcew.zip from the NYSDOL website: https://dol.ny.gov/quarterly-census-employment-and-wages Direct link to [qcew.zip](https://statistics.labor.ny.gov/qcew.zip).
 
@@ -139,6 +139,22 @@ options(timeout = timeout)
 Takes ~ 15 secs
 
 ```{r}
+#| label: check-recompression-needed
+
+zpath <- fs::path(DRAW, "qcew.zip")
+zfiles <- zip::zip_list(zpath)
+
+csvfiles <- zfiles |>
+  filter(str_starts(filename, "qcew_quarter_")) |>
+  pull(filename)
+
+# Pipe directly into vroom - if this works, recompression not needed
+df <- vroom(purrr::map(csvfiles, \(x) archive::archive_read(zpath, file = x)))
+
+
+```
+
+```{r}
 #| label: recompress
 #| eval: false
 
@@ -185,7 +201,7 @@ b - a
 Takes about 10 seconds not counting save.
 
 ```{r}
-#| label: get-qcew
+#| label: get-qcew-quarterly
 
 # get names of the csv quarterly files and then read them
 
